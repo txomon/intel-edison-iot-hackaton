@@ -5,6 +5,7 @@ try:
 except ImportError:
     import json
 import logging
+import os
 import requests
 import time
 
@@ -23,8 +24,10 @@ class Component(object):
     def set_up(self, component):
         assert(self.keyword == component['type'])
         if not self.register_location(component.get('pin', '')):
+            logger.error('Registering location wrong')
             return False
         if not self.register_custom(component):
+            logger.error('Registering custom properities wrong')
             return False
         self.actuator = self.get_actuator()
         return True
@@ -64,14 +67,26 @@ class Component(object):
 
     value = property(get_value, set_value)
 
+    __nonzero__ = lambda s: s.value
+
+    __repr__ = lambda s: s.value.__repr__()
+    __str__ = lambda s: s.value.__str__()
+    __lt__ = lambda s, o: s.value.__lt__(o)
+    __le__ = lambda s, o: s.value.__le__(o)
+    __eq__ = lambda s, o: s.value.__eq__(o)
+    __ne__ = lambda s, o: s.value.__ne__(o)
+    __gt__ = lambda s, o: s.value.__gt__(o)
+    __ge__ = lambda s, o: s.value.__ge__(o)
+    __cmp__ = lambda s, o: s.value.__cmp__(o)
+    __unicode__ = lambda s: s.value.__unicode__()
+
     @classmethod
     def generate_help(cls):
         print("Module %s doesn't have documentation"% cls.__name__)
+        print("But, the type is '%s' and the pin has to be '%s'" % (cls.keyword, cls.connector))
 
 try:
-    import mock
-    pyupm_grove = mock.Mock()
-    #import pyupm_grove
+    import pyupm_grove
 
     class GroveLed(Component):
         keyword = 'led'
@@ -85,6 +100,7 @@ try:
             return pyupm_grove.GroveLed(self.pin)
 
         def set_value(self, new_value):
+            logger.debug('Changing value to %r', new_value)
             if new_value:
                 self._value = True
                 self.actuator.on()
@@ -93,9 +109,10 @@ try:
                 self.actuator.off()
 
         def get_value(self):
-            logger.debug('Returning led state %b', self._value)
+            logger.debug('Returning led state %r', self._value)
             return self._value
 
+        value = property(get_value, set_value)
 
     class GroveButton(Component):
         keyword = 'button'
@@ -107,6 +124,7 @@ try:
         def get_value(self):
             return self.actuator.value()
 
+        value = property(get_value)
 
     class GroveLight(Component):
         keyword = 'light_sensor'
@@ -118,6 +136,7 @@ try:
         def get_value(self):
             return self.actuator.value()
 
+        value = property(get_value)
 
     class GroveRelay(Component):
         keyword = 'relay'
@@ -135,10 +154,12 @@ try:
             else:
                 self.actuator.off()
 
+        value = property(get_value, set_value)
+
 
     class GroveRotary(Component):
         keyword = 'rotary'
-        connect = 'analogical'
+        connector = 'analogical'
 
         def get_actuator(self):
             return pyupm_grove.GroveRotary(self.pin)
@@ -146,12 +167,15 @@ try:
         def get_value(self):
             return self.actuator.abs_deg()
 
+        value = property(get_value)
+
 
     class GroveSlide(Component):
         keyword = 'slide'
-        connect = 'analogical'
+        connector = 'analogical'
 
         def __init__(self):
+            super(GroveSlide, self).__init__()
             self._ref = 5
 
         def get_actuator(self):
@@ -160,21 +184,25 @@ try:
         def get_value(self):
             return self.actuator.value()
 
+        value = property(get_value)
+
         ref = property(lambda s: s._ref)
-                   
+
         def register_custom(self, component):
             self._ref = component.get('ref', 5)
 
 
     class GroveTemp(Component):
         keyword = 'temperature'
-        connect = 'analogical'
+        connector = 'analogical'
 
         def get_actuator(self):
             return pyupm_grove.GroveSlide(self.pin)
 
         def get_value(self):
             return self.actuator.value()
+
+        value = property(get_value)
 
 except ImportError:
     logger.warn('pyupm_grove library is missing in the python module path')
@@ -186,22 +214,47 @@ try:
 
     class Microphone(Component):
         keyword = 'microphone'
-        connect = 'analogical'
+        connector = 'analogical'
+        _sample_rate = 2
+        threshold = 160
+        samples = 64
 
         def __init__(self):
-            self.threshold = 20
+            super(Microphone, self).__init__()
+            self.ctx = None
 
         def get_actuator(self):
             return pyupm_mic.Microphone(self.pin)
 
         def get_value(self):
-            sample_buffer = pyupm_mic.uint16Array(20)
-            ctx = pyupm_mic.thresholdContext()
-            self.actuator.getSampledWindow(20, 5, sample_buffer)
-            return self.actuator.findThreshold(ctx, self.threshold, sample_buffer, 20)
+            sample_buffer = pyupm_mic.uint16Array(self.samples)
+            s_num = self.actuator.getSampledWindow(
+                    self._sample_rate,
+                    self.samples,
+                    sample_buffer
+            )
+            if s_num:
+                db = self.actuator.findThreshold(
+                        self.ctx,
+                        self.threshold,
+                        sample_buffer,
+                        self.samples
+                )
+                return db
+
+            logger.info('No actual data from microphone')
+            return False
+
+        value = property(get_value)
 
         def register_custom(self, component):
-            self.threshold = component.get('threshold', 20)
+            self.threshold = component.get('threshold', self.threshold)
+            self._sample_rate = component.get('sample_rate', self._sample_rate)
+            self.ctx = pyupm_mic.thresholdContext()
+            self.ctx.averageReading = 0
+            self.ctx.runningAverage = 0
+            self.ctx.averagedOver = self._sample_rate
+            return True
 
 
 except ImportError:
@@ -214,7 +267,7 @@ try:
 
     class PiezoVibration(Component):
         keyword = 'piezo_vibration'
-        connect = 'analogical'
+        connector = 'analogical'
 
         def get_actuator(self):
             return pyupm_ldt0028.LDT0028(self.pin)
@@ -222,10 +275,59 @@ try:
         def get_value(self):
             return self.actuator.getSample()
 
+        value = property(get_value)
+
 except ImportError:
     logger.warn('pyupm_ldt0028 library is missing in the python module path')
     logger.warn('"piezo_vibration" type will not be available')
 
+try:
+    import pyupm_buzzer
+
+    class Buzzer(Component):
+        keyword = 'buzzer'
+        connector = 'digital'
+
+        def __init__(self):
+            super(Buzzer, self).__init__()
+            self._frequency = 0
+
+        def get_actuator(self):
+            return pyupm_buzzer.Buzzer(self.pin)
+
+        def get_value(self):
+            return self._frequency
+
+        def set_value(self, value):
+            if value <= 0:
+                self.actuator.stopSound()
+            else:
+                self.actuator.playSound(value, 0)
+                self._frequency = value
+
+        value = property(get_value, set_value)
+
+except ImportError:
+    logger.warn('pyupm_buzzer library is missing in the python module path')
+    logger.warn('"buzzer" type will not be available')
+    
+
+try:
+    import pyupm_mma7660
+
+    class Accelerometer(Component):
+        keyword = 'accelerometer'
+        connector = 'I2C'
+
+        def get_actuator(self):
+            return pyupm_mma7660.MMA7660(self.pin)
+
+        def get_value(self):
+            pass
+
+except ImportError:
+    logger.warn('pyupm_mma7660 library is missing in the python module path')
+    logger.warn('"accelerometer" type will not be available')
 
 
 def check_layout(layout):
@@ -252,11 +354,17 @@ class IntelBoard():
 
     @classmethod
     def from_file(cls, file_path):
-        with open(file_path) as f:
+        if os.path.exists(file_path):
+            with open(file_path) as f:
+                try:
+                    layout = json.loads(f.read())
+                except ValueError as e:
+                    raise ValueError('File "%s" content is not valid JSON' % file_path)
+        else:
             try:
-                layout = json.loads(f.read())
+                layout = json.loads(file_path)
             except ValueError as e:
-                raise ValueError('File "%s" content is not valid JSON' % file_path)
+                raise ValueError('String board content is not valid JSON')
         board = cls()
         if check_layout(layout):
             raise ValueError('File "%s" contains reported errors' % file_path)
@@ -271,6 +379,7 @@ class IntelBoard():
                 continue
             module = cls()
             if not module.set_up(component):
+                logger.error('Error setting up component %s', component['name'])
                 return False
             self.components[component['name']] = module
             return True
@@ -279,7 +388,7 @@ class IntelBoard():
 
     def __getattr__(self, attr):
         logger.debug('Getting attr "%s"', attr)
-        if  attr in self.components:
+        if attr in self.components:
             return self.components[attr]
         else:
             logger.warn("Component %s is not defined in board", attr)
@@ -316,6 +425,9 @@ class IntelBoard():
                 'key': self.user_token
         }
         requests.post(url, json=args)
+
+    def sleep(self, t):
+        time.sleep(t)
 
 
 
