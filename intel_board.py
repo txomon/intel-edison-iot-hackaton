@@ -24,16 +24,20 @@ class Component(object):
     def set_up(self, component):
         assert(self.keyword == component['type'])
         if not self.register_location(component.get('pin', '')):
-            logger.error('Registering location wrong')
+            logger.error('Registering location went wrong')
             return False
         if not self.register_custom(component):
-            logger.error('Registering custom properities wrong')
+            logger.error('Registering custom properties went wrong')
             return False
         self.actuator = self.get_actuator()
+        self.initialize()
         return True
 
     def register_custom(self, component):
         return True
+
+    def initialize(self):
+        pass
     
     def register_location(self, location):
         location = location.upper()
@@ -197,7 +201,7 @@ try:
         connector = 'analogical'
 
         def get_actuator(self):
-            return pyupm_grove.GroveSlide(self.pin)
+            return pyupm_grove.GroveTemp(self.pin)
 
         def get_value(self):
             return self.actuator.value()
@@ -250,11 +254,13 @@ try:
         def register_custom(self, component):
             self.threshold = component.get('threshold', self.threshold)
             self._sample_rate = component.get('sample_rate', self._sample_rate)
+            return True
+
+        def initialize(self):
             self.ctx = pyupm_mic.thresholdContext()
             self.ctx.averageReading = 0
             self.ctx.runningAverage = 0
             self.ctx.averagedOver = self._sample_rate
-            return True
 
 
 except ImportError:
@@ -318,12 +324,34 @@ try:
     class Accelerometer(Component):
         keyword = 'accelerometer'
         connector = 'I2C'
+        bus = pyupm_mma7660.MMA7660_I2C_BUS
+        address = pyupm_mma7660.MMA7660_DEFAULT_I2C_ADDR
+
 
         def get_actuator(self):
-            return pyupm_mma7660.MMA7660(self.pin)
+            return pyupm_mma7660.MMA7660(self.bus, self.address)
+
+        def initialize(self):
+            self.actuator.setModeStandby()
+            self.actuator.setSampleRate(pyupm_mma7660.MMA7660.AUTOSLEEP_64)
+            self.actuator.setModeActive()
+
+        def _get_raw_value(self):
+            x = pyupm_mma7660.new_floatp()
+            y = pyupm_mma7660.new_floatp()
+            z = pyupm_mma7660.new_floatp()
+            self.actuator.getAcceleration(x, y, z)
+            return (
+                pyupm_mma7660.floatp_value(x),
+                pyupm_mma7660.floatp_value(y),
+                pyupm_mma7660.floatp_value(z)
+            )
 
         def get_value(self):
-            pass
+            return self._get_raw_value()
+
+        value = property(get_value)
+
 
 except ImportError:
     logger.warn('pyupm_mma7660 library is missing in the python module path')
