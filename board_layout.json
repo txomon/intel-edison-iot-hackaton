@@ -1,0 +1,34 @@
+{
+	"components": [
+		{
+			"type": "led",
+			"name": "blue_led",
+			"pin": "D2"
+		},
+		{
+			"type": "led",
+			"name": "green_led",
+			"pin": "D3"
+		},
+		{
+			"type": "button",
+			"name": "enable",
+			"pin": "D4"
+		},
+		{
+			"type": "light_sensor",
+			"name": "g_sensor",
+			"pin": "A1"
+		},
+		{
+			"type": "relay",
+			"name": "g_relay",
+			"pin": "D5"
+		},
+		{
+			"type": "rotary",
+			"name": "g_rotary",
+			"pin": "A2"
+		}
+	]
+}
