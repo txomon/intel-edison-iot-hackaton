@@ -6,8 +6,8 @@
 			"pin": "D2"
 		},
 		{
-			"type": "led",
-			"name": "green_led",
+			"type": "relay",
+			"name": "g_relay",
 			"pin": "D3"
 		},
 		{
@@ -21,14 +21,44 @@
 			"pin": "A1"
 		},
 		{
-			"type": "relay",
-			"name": "g_relay",
-			"pin": "D5"
-		},
-		{
 			"type": "rotary",
 			"name": "g_rotary",
 			"pin": "A2"
+		},
+		{
+			"type": "temperature",
+			"name": "temp",
+			"pin": "A3"
+		},
+		{
+			"type": "sound_sensor",
+			"name": "g_ss",
+			"pin": "A4"
+		},
+		{
+			"type": "piezo_vibration",
+			"name": "vibration",
+			"pin": "A1"
+		},
+		{
+			"type": "touch_sensor",
+			"name": "touch",
+			"pin": "A2"
+		},
+		{
+			"type": "buzzer",
+			"name": "buzzer",
+			"pin": "A3"
+		},
+		{
+			"type": "accelerometer",
+			"name": "accel",
+			"pin": "A4"
+		},
+		{
+			"type": "lcd_rgb",
+			"name": "screen",
+			"pin": "D5"
 		}
 	]
 }

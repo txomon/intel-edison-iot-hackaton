@@ -5,6 +5,7 @@ try:
 except ImportError:
     import json
 import logging
+import requests
 import time
 
 logging.basicConfig(
@@ -166,7 +167,7 @@ try:
 
 
     class GroveTemp(Component):
-        keyword = 'temp'
+        keyword = 'temperature'
         connect = 'analogical'
 
         def get_actuator(self):
@@ -174,12 +175,74 @@ try:
 
         def get_value(self):
             return self.actuator.value()
-        
 
 except ImportError:
     logger.warn('pyupm_grove library is missing in the python module path')
-    logger.warn('GroveLed, GroveButton, GroveLight, GroveRelay, GroveRotary,'
-            ' GroveSlide and GroveTemp are not available')
+    logger.warn('"led", "button", "light_sensor", "relay", "rotary", "slide"'
+            ' and "temperature" types will not be available')
+
+try: 
+    import pyupm_mic
+
+    class Microphone(Component):
+        keyword = 'microphone'
+        connect = 'analogical'
+
+        def __init__(self):
+            self.threshold = 20
+
+        def get_actuator(self):
+            return pyupm_mic.Microphone(self.pin)
+
+        def get_value(self):
+            sample_buffer = pyupm_mic.uint16Array(20)
+            ctx = pyupm_mic.thresholdContext()
+            self.actuator.getSampledWindow(20, 5, sample_buffer)
+            return self.actuator.findThreshold(ctx, self.threshold, sample_buffer, 20)
+
+        def register_custom(self, component):
+            self.threshold = component.get('threshold', 20)
+
+
+except ImportError:
+    logger.warn('pyupm_mic library is missing in the python module path')
+    logger.warn('"microphone" type will not be available')
+
+
+try:
+    import pyupm_ldt0028
+
+    class PiezoVibration(Component):
+        keyword = 'piezo_vibration'
+        connect = 'analogical'
+
+        def get_actuator(self):
+            return pyupm_ldt0028.LDT0028(self.pin)
+
+        def get_value(self):
+            return self.actuator.getSample()
+
+except ImportError:
+    logger.warn('pyupm_ldt0028 library is missing in the python module path')
+    logger.warn('"piezo_vibration" type will not be available')
+
+
+
+def check_layout(layout):
+    error = False
+    pins = {}
+    for comp in layout['components']:
+        if comp['pin'] in pins:
+            error = True
+            logger.error(
+                "Component %s overlaps existing %s in pin %s",
+                comp['type'],
+                pins[comp['pin']]['type'],
+                comp['pin']
+            )
+            continue
+        pins[comp['pin']] = comp
+    return error
 
 
 class IntelBoard():
@@ -193,10 +256,13 @@ class IntelBoard():
             try:
                 layout = json.loads(f.read())
             except ValueError as e:
-                raise ValueError('File "%s" content is not valid JSON' %file_path)
+                raise ValueError('File "%s" content is not valid JSON' % file_path)
         board = cls()
+        if check_layout(layout):
+            raise ValueError('File "%s" contains reported errors' % file_path)
         for component in layout['components']:
-            board.register_component(component)
+            if not board.register_component(component):
+                logger.error('Component %s is not supported', component['type'])
         return board
 
     def register_component(self, component):
@@ -210,6 +276,7 @@ class IntelBoard():
             return True
         else:
             return False
+
     def __getattr__(self, attr):
         logger.debug('Getting attr "%s"', attr)
         if  attr in self.components:
@@ -234,13 +301,21 @@ class IntelBoard():
         time.sleep(1)
         return True
 
-    def notify_once(self, event, *args, **kwargs):
-        current_args = {'args': args, 'kwargs': kwargs}
+    def notify_once(self, event, value1=None, value2=None, value3=None):
+        current_args = {'value1': value1, 'value2': value2, 'value3': value3}
         if event in self.events and current_args == self.events[event]:
             logger.debug('Skipping sending event %s upstream', event)
             return
         logger.info('Sending event %s upstream', event)
         self.events[event] = current_args
+        self._send_event(self, event, current_args)
+
+    def _send_event(self, event, args):
+        url = 'https://maker.ifttt.com/trigger/{event}/with/key/{key}' % {
+                'event': event,
+                'key': self.user_token
+        }
+        requests.post(url, json=args)
 
 
 
@@ -253,5 +328,6 @@ else:
     parser = argparse.ArgumentParser(description='Intel Board simple API engine')
     parser.add_argument('user_token', help='User token extracted from https://ifttt.com/maker')
     args = parser.parse_args()
+    IntelBoard.user_token = args.user_token
 
 
