@@ -75,19 +75,19 @@ class Component(object):
 
     __repr__ = lambda s: s.value.__repr__()
     __str__ = lambda s: s.value.__str__()
-    __lt__ = lambda s, o: s.value.__lt__(o)
-    __le__ = lambda s, o: s.value.__le__(o)
-    __eq__ = lambda s, o: s.value.__eq__(o)
-    __ne__ = lambda s, o: s.value.__ne__(o)
-    __gt__ = lambda s, o: s.value.__gt__(o)
-    __ge__ = lambda s, o: s.value.__ge__(o)
-    __cmp__ = lambda s, o: s.value.__cmp__(o)
+    __lt__ = lambda s, o: s.value < o
+    __le__ = lambda s, o: s.value <= o
+    __eq__ = lambda s, o: s.value == o
+    __ne__ = lambda s, o: s.value != o
+    __gt__ = lambda s, o: s.value > o
+    __ge__ = lambda s, o: s.value >= o
     __unicode__ = lambda s: s.value.__unicode__()
 
     @classmethod
     def generate_help(cls):
         print("Module %s doesn't have documentation"% cls.__name__)
         print("But, the type is '%s' and the pin has to be '%s'" % (cls.keyword, cls.connector))
+
 
 try:
     import pyupm_grove
@@ -445,12 +445,12 @@ class IntelBoard():
             return
         logger.info('Sending event %s upstream', event)
         self.events[event] = current_args
-        self._send_event(self, event, current_args)
+        self._send_event(event, current_args)
 
     def _send_event(self, event, args):
-        url = 'https://maker.ifttt.com/trigger/{event}/with/key/{key}' % {
+        url = 'https://maker.ifttt.com/trigger/%(event)s/with/key/%(token)s' % {
                 'event': event,
-                'key': self.user_token
+                'token': self.user_token,
         }
         requests.post(url, json=args)
 
